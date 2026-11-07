@@ -1,0 +1,39 @@
+name: macOS GUI Session
+on:
+  workflow_dispatch:
+
+jobs:
+  gui-session:
+    runs-on: macos-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # 1. Start the native macOS Screen Sharing (VNC) service
+    - name: Enable Screen Sharing
+      run: |
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStartOnConsole -bool true
+        sudo defaults write /Library/Preferences/com.apple.RemoteManagement PermitTools -bool true
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+          -activate -configure -access -on -restart -agent -privs -all
+
+    # 2. Set a login password for the runner user
+    - name: Set Password
+      run: |
+        echo "runner:macpassword123" | sudo chpasswd
+
+    # 3. Download Ngrok and tunnel port 5900
+    - name: Start Tunnel
+      env:
+        NGROK_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      run: |
+        brew install ngrok
+        ngrok config add-authtoken $NGROK_TOKEN
+        echo "=== CONNECT NOW ==="
+        # Run ngrok in the background and print the public URL
+        ngrok tcp 5900 --log=stdout &
+        sleep 5
+        curl -s http://localhost:4040/api/tunnels | grep -o 'tcp://[^"]*'
+        
+        # Keep the runner alive for up to 5.5 hours
+        sleep 20000 
